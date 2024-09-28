@@ -2,6 +2,8 @@ import streamlit as st
 import datetime
 import json
 import os
+from audio_recorder_streamlit import audio_recorder
+import io
 import speech_recognition as sr
 
 # Function to load existing entries
@@ -17,18 +19,18 @@ def save_entries(entries):
         json.dump(entries, f)
 
 # Function for speech recognition
-def speech_to_text():
+def speech_to_text(audio_bytes):
     r = sr.Recognizer()
-    with sr.Microphone() as source:
-        st.write("Speak now...")
-        audio = r.listen(source)
-        try:
-            text = r.recognize_google(audio)
-            return text
-        except sr.UnknownValueError:
-            st.error("Sorry, I couldn't understand that.")
-        except sr.RequestError:
-            st.error("Sorry, there was an error with the speech recognition service.")
+    with io.BytesIO(audio_bytes) as audio_file:
+        with sr.AudioFile(audio_file) as source:
+            audio = r.record(source)
+            try:
+                text = r.recognize_google(audio)
+                return text
+            except sr.UnknownValueError:
+                st.error("Sorry, I couldn't understand that.")
+            except sr.RequestError:
+                st.error("Sorry, there was an error with the speech recognition service.")
     return ""
 
 # Load existing entries
@@ -44,11 +46,17 @@ date_str = selected_date.strftime("%Y-%m-%d")
 input_method = st.radio("Choose input method:", ("Type", "Record"))
 
 if input_method == "Type":
-    entry = st.text_area("Write your diary entry:", entries.get(date_str, ""))
+    entry = st.text_area("Write your diary entry:", entries.get(date_str, ""), height=300)
 else:
-    if st.button("Start Recording"):
-        entry = speech_to_text()
-        st.write("Recorded text:", entry)
+    st.write("Click the microphone icon below to start recording:")
+    audio_bytes = audio_recorder()
+    if audio_bytes:
+        st.audio(audio_bytes, format="audio/wav")
+        st.write("Converting speech to text...")
+        transcribed_text = speech_to_text(audio_bytes)
+        st.write("Transcribed text:")
+        entry = st.text_area("Edit your transcribed entry:", transcribed_text, height=300)
+        st.info("You can edit the transcribed text above to correct any errors.")
     else:
         entry = entries.get(date_str, "")
 
@@ -62,4 +70,4 @@ if st.button("Save Entry"):
 st.subheader("Your Diary Entries")
 for date, entry in sorted(entries.items(), reverse=True):
     with st.expander(date):
-        st.write(entry)
+        st.write(entry) 
